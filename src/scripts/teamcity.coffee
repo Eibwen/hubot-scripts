@@ -5,8 +5,9 @@
 #   "underscore": "1.3.3"
 #
 # Configuration:
-#   HUBOT_TEAMCITY_USERNAME = <user name>
-#   HUBOT_TEAMCITY_PASSWORD = <password>
+#   HUBOT_TEAMCITY_AUTH = "httpAuth" (default) or "guestAuth"
+#   HUBOT_TEAMCITY_USERNAME = <user name> (not required for guestAuth)
+#   HUBOT_TEAMCITY_PASSWORD = <password> (not required for guestAuth)
 #   HUBOT_TEAMCITY_HOSTNAME = <host : port>
 #   HUBOT_TEAMCITY_SCHEME = <http || https> defaults to http if not set.
 #
@@ -30,19 +31,24 @@ util           = require 'util'
 _              = require 'underscore'
 
 module.exports = (robot) ->
+  authPath = process.env.HUBOT_TEAMCITY_AUTH || "httpAuth" #or "guestAuth"
   username = process.env.HUBOT_TEAMCITY_USERNAME
   password = process.env.HUBOT_TEAMCITY_PASSWORD
   hostname = process.env.HUBOT_TEAMCITY_HOSTNAME
   scheme = process.env.HUBOT_TEAMCITY_SCHEME || "http"
   base_url = "#{scheme}://#{hostname}"
+  base_rest_api = "#{base_url}/#{authPath}/app/rest"
 
   buildTypes = []
 
   getAuthHeader = ->
-    return Authorization: "Basic #{new Buffer("#{username}:#{password}").toString("base64")}", Accept: "application/json"
+    if authPath is "guestAuth"
+      return Accept: "application/json"
+    else
+      return Authorization: "Basic #{new Buffer("#{username}:#{password}").toString("base64")}", Accept: "application/json"
 
   getBuildType = (msg, type, callback) ->
-    url = "#{base_url}/httpAuth/app/rest/buildTypes/#{type}"
+    url = "#{base_rest_api}/buildTypes/#{type}"
     msg.http(url)
       .headers(getAuthHeader())
       .get() (err, res, body) ->
@@ -53,9 +59,9 @@ module.exports = (robot) ->
     if (arguments.length == 2)
       if (Object.prototype.toString.call(type) == "[object Function]")
         callback = type
-        url = "#{base_url}/httpAuth/app/rest/builds/?locator=running:true"
+        url = "#{base_rest_api}/builds/?locator=running:true"
     else
-      url = "#{base_url}/httpAuth/app/rest/builds/?locator=buildType:#{type},running:true"
+      url = "#{base_rest_api}/builds/?locator=buildType:#{type},running:true"
     msg.http(url)
       .headers(getAuthHeader())
       .get() (err, res, body) ->
@@ -64,7 +70,7 @@ module.exports = (robot) ->
 
 
   getProjects = (msg, callback) ->
-    url = "#{base_url}/httpAuth/app/rest/projects"
+    url = "#{base_rest_api}/projects"
     msg.http(url)
       .headers(getAuthHeader())
       .get() (err, res, body) ->
@@ -76,7 +82,7 @@ module.exports = (robot) ->
     projectSegment = ''
     if project?
       projectSegment = '/projects/name:' + encodeURIComponent project
-    url = "#{base_url}/httpAuth/app/rest#{projectSegment}/buildTypes"
+    url = "#{base_rest_api}#{projectSegment}/buildTypes"
     msg.http(url)
       .headers(getAuthHeader())
       .get() (err, res, body) ->
@@ -89,7 +95,7 @@ module.exports = (robot) ->
     if project?
       projectSegment = "/projects/name:#{encodeURIComponent(project)}"
 
-    url = "#{base_url}/httpAuth/app/rest#{projectSegment}/buildTypes/name:#{encodeURIComponent(configuration)}/builds"
+    url = "#{base_rest_api}#{projectSegment}/buildTypes/name:#{encodeURIComponent(configuration)}/builds"
     msg.http(url)
       .headers(getAuthHeader())
       .query(locator: ["count:#{amount}","running:any"].join(","))
@@ -117,7 +123,7 @@ module.exports = (robot) ->
   mapBuildToNameList = (build) ->
     id = build['buildTypeId']
     msg = build['messengerBot']
-    url = "#{base_url}/httpAuth/app/rest/buildTypes/id:#{id}"
+    url = "#{base_rest_api}/buildTypes/id:#{id}"
     msg.http(url)
       .headers(getAuthHeader())
       .get() (err, res, body) ->
@@ -185,7 +191,7 @@ module.exports = (robot) ->
         msg.send "Build type #{buildName} was not found"
         return
 
-      url = "#{base_url}/httpAuth/action.html?add2Queue=#{buildType}"
+      url = "#{base_url}/#{authPath}/action.html?add2Queue=#{buildType}"
       msg.http(url)
         .headers(getAuthHeader())
         .get() (err, res, body) ->
